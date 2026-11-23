@@ -1,0 +1,26 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  order:
+    build: ./order
+    ports: ["5000:5000"]
+    environment:
+      BROKER_HOST: rabbitmq
+    volumes: [orderdata:/data]
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+  notification:
+    build: ./notification
+    environment:
+      BROKER_HOST: rabbitmq
+    volumes: [notificationdata:/data]
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+volumes:
+  orderdata:
+  notificationdata:
