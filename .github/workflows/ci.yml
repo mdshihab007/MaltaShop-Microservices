@@ -1,15 +1,17 @@
-
 name: Prototype checks
 
-on: [push, pull_request]
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
   check:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
@@ -21,3 +23,42 @@ jobs:
 
       - name: Build containers
         run: docker compose build
+
+      - name: Start prototype
+        run: |
+          docker compose up -d --wait
+          docker compose ps
+
+      - name: Test Order Request and Response
+        run: |
+          echo "POST /orders"
+          echo 'Request: {"item":"headphones"}'
+          echo "Correlation ID: demo-123"
+
+          curl --fail-with-body -i \
+            -X POST http://localhost:5000/orders \
+            -H "Content-Type: application/json" \
+            -H "X-Correlation-ID: demo-123" \
+            -d '{"item":"headphones"}'
+
+      - name: Verify Notification Event
+        run: |
+          for i in $(seq 1 30); do
+            if docker compose logs notification | grep -q "demo-123"; then
+              docker compose logs notification
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs notification
+          exit 1
+
+      - name: Verify Matching Correlation IDs
+        run: |
+          docker compose logs order notification
+          docker compose logs order | grep "demo-123"
+          docker compose logs notification | grep "demo-123"
+
+      - name: Stop containers
+        if: always()
+        run: docker compose down -v
